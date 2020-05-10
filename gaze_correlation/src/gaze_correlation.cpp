@@ -30,7 +30,6 @@ using geometric_primitive_msgs::msg::Cylinder;
 using geometric_primitive_msgs::msg::GeometricPrimitive;
 using geometric_primitive_msgs::msg::Plane;
 using geometric_primitive_msgs::msg::Sphere;
-using namespace std::literals;
 
 /////////////////
 /// CONSTANTS ///
@@ -64,18 +63,20 @@ typedef message_filters::sync_policies::ApproximateTime<gaze_msgs::msg::GazeStam
 
 namespace Eigen
 {
-void fromMsg(const geometry_msgs::msg::Vector3 &input, Eigen::Vector3d &output)
-{
-  output.x() = input.x;
-  output.y() = input.y;
-  output.z() = input.z;
-}
-
-Eigen::ParametrizedLine<double, 3> transform(Eigen::ParametrizedLine<double, 3> &parametrized_line, const Eigen::Isometry3d &transformation)
-{
-  return Eigen::ParametrizedLine<double, 3>(transformation * parametrized_line.origin(), transformation.rotation() * parametrized_line.direction());
-}
+  void fromMsg(const geometry_msgs::msg::Vector3 &input, Eigen::Vector3d &output)
+  {
+    output.x() = input.x;
+    output.y() = input.y;
+    output.z() = input.z;
+  }
 } // namespace Eigen
+namespace tf2
+{
+  Eigen::ParametrizedLine<double, 3> transform(Eigen::ParametrizedLine<double, 3> &parametrized_line, const Eigen::Isometry3d &transformation)
+  {
+    return Eigen::ParametrizedLine<double, 3>(transformation * parametrized_line.origin(), transformation.rotation() * parametrized_line.direction());
+  }
+} // namespace tf2
 
 //////////////////
 /// NODE CLASS ///
@@ -102,9 +103,9 @@ private:
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_markers_;
 
   /// Buffer for tf2 transforms
-  tf2_ros::Buffer tf2_buffer;
+  tf2_ros::Buffer tf2_buffer_;
   /// Listener of tf2 transforms
-  tf2_ros::TransformListener tf_listener;
+  tf2_ros::TransformListener tf2_listener_;
 
   /// Callback called each time a message is received on all topics
   void synchronized_callback(const gaze_msgs::msg::GazeStamped::SharedPtr msg_gaze,
@@ -115,8 +116,8 @@ GazeCorrelation::GazeCorrelation() : Node(NODE_NAME),
                                      sub_gaze_(this, "gaze"),
                                      sub_primitives_(this, "geometric_primitives"),
                                      synchronizer_(synchronizer_policy(SYNCHRONIZER_QUEUE_SIZE), sub_gaze_, sub_primitives_),
-                                     tf2_buffer(this->get_clock()),
-                                     tf_listener(tf2_buffer)
+                                     tf2_buffer_(this->get_clock()),
+                                     tf2_listener_(tf2_buffer_)
 {
   // Synchronize the subscriptions under a single callback
   synchronizer_.registerCallback(&GazeCorrelation::synchronized_callback, this);
@@ -159,8 +160,8 @@ void GazeCorrelation::synchronized_callback(const gaze_msgs::msg::GazeStamped::S
 
   // Create a parametrized line from the gaze
   Eigen::Vector3d origin, direction;
-  Eigen::fromMsg(msg_gaze->gaze.eyeball_centre, origin);
-  Eigen::fromMsg(msg_gaze->gaze.visual_axis, direction);
+  Eigen::fromMsg(msg_gaze->gaze.origin, origin);
+  Eigen::fromMsg(msg_gaze->gaze.direction, direction);
   Eigen::ParametrizedLine<double, 3> gaze(origin, direction);
 
   // Make sure the gaze and primitives are in the same coordinate system
@@ -170,7 +171,7 @@ void GazeCorrelation::synchronized_callback(const gaze_msgs::msg::GazeStamped::S
     geometry_msgs::msg::TransformStamped transform_stamped;
     try
     {
-      transform_stamped = tf2_buffer.lookupTransform(msg_primitives->header.frame_id, msg_gaze->header.frame_id, rclcpp::Time(0));
+      transform_stamped = tf2_buffer_.lookupTransform(msg_primitives->header.frame_id, msg_gaze->header.frame_id, rclcpp::Time(0));
     }
     catch (tf2::TransformException &ex)
     {
@@ -179,7 +180,7 @@ void GazeCorrelation::synchronized_callback(const gaze_msgs::msg::GazeStamped::S
     }
 
     // Transform gaze into coordinate system of geometric primitives
-    gaze = Eigen::transform(gaze, tf2::transformToEigen(transform_stamped.transform));
+    gaze = tf2::transform(gaze, tf2::transformToEigen(transform_stamped.transform));
   }
 
   // List of found intersections in form of <double, <type, id>>
@@ -266,7 +267,7 @@ void GazeCorrelation::synchronized_callback(const gaze_msgs::msg::GazeStamped::S
       tf2::fromMsg(cylinder.pose, pose);
 
       // Transform the gaze to the coordinate system of the cyllinder
-      Eigen::ParametrizedLine<double, 3> gaze_wrt_cyllinder = Eigen::transform(gaze, pose.inverse());
+      Eigen::ParametrizedLine<double, 3> gaze_wrt_cyllinder = tf2::transform(gaze, pose.inverse());
 
       // Convert to 2D (line direction should not be normalized!)
       Eigen::ParametrizedLine<double, 2> gaze_wrt_cyllinder_2d(gaze_wrt_cyllinder.origin().head<2>(), gaze_wrt_cyllinder.direction().head<2>());
