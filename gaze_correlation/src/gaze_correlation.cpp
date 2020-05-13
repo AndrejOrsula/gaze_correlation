@@ -99,6 +99,8 @@ private:
 
   /// Publisher of the correlated primitive
   rclcpp::Publisher<geometric_primitive_msgs::msg::GeometricPrimitiveStamped>::SharedPtr pub_object_of_interest_;
+  /// Publisher of the point of gaze
+  rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_point_of_gaze_;
   /// Publisher of visualisation markers
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_markers_;
 
@@ -131,6 +133,10 @@ GazeCorrelation::GazeCorrelation() : Node(NODE_NAME),
   // Register publisher of the primitive correlated with gaze
   rclcpp::QoS qos_object_of_interest = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
   pub_object_of_interest_ = this->create_publisher<geometric_primitive_msgs::msg::GeometricPrimitiveStamped>("object_of_interest", qos_object_of_interest);
+
+  // Register publisher of the point of gaze
+  rclcpp::QoS qos_point_of_gaze = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
+  pub_point_of_gaze_ = this->create_publisher<geometry_msgs::msg::PointStamped>("point_of_gaze", qos_point_of_gaze);
 
   // Register publisher of visualisation markers
   if (publish_markers)
@@ -362,6 +368,12 @@ void GazeCorrelation::synchronized_callback(const gaze_msgs::msg::GazeStamped::S
 
   // Publish the correlated object of interest
   pub_object_of_interest_->publish(msg_object_of_interest);
+
+  // Publish the point of gaze
+  geometry_msgs::msg::PointStamped msg_point_of_gaze;
+  msg_point_of_gaze.header = msg_primitives->header;
+  msg_point_of_gaze.point = Eigen::toMsg(point_of_gaze);
+  pub_point_of_gaze_->publish(msg_point_of_gaze);
 
   if (this->get_parameter("publish_markers").get_value<bool>())
   {
