@@ -43,9 +43,9 @@ const uint8_t SYNCHRONIZER_QUEUE_SIZE = 10;
 const bool VISUALISE_GAZE = true;
 const float VISUAL_GAZE_LENGTH = 5.0;
 const float VISUAL_GAZE_WIDTH = 0.005;
-const float VISUAL_GAZE_COLOR[] = {0, 0, 1.0, 1};
+const float VISUAL_GAZE_COLOR[] = {1.0, 0, 0, 1};
 
-const float VISUAL_POINT_OF_GAZE_SCALE = 0.0125;
+const float VISUAL_POINT_OF_GAZE_SCALE = 0.025;
 const float VISUAL_POINT_OF_GAZE_COLOR[] = {1.0, 0.0, 0, 1};
 
 /////////////
@@ -188,6 +188,7 @@ void GazeCorrelation::synchronized_callback(const gaze_msgs::msg::GazeStamped::S
     // Transform gaze into coordinate system of geometric primitives
     gaze = tf2::transform(gaze, tf2::transformToEigen(transform_stamped.transform));
   }
+  gaze.direction().normalize();
 
   // List of found intersections in form of <double, <type, id>>
   std::vector<std::pair<double, std::pair<uint8_t, uint32_t>>> intersections;
@@ -309,15 +310,15 @@ void GazeCorrelation::synchronized_callback(const gaze_msgs::msg::GazeStamped::S
     }
   }
 
-  // Sort the intersections
-  std::sort(intersections.begin(), intersections.end());
-
   // Make sure at least one intersction was found
   if (intersections.empty())
   {
     RCLCPP_WARN(this->get_logger(), "No intersection of gaze with surroundings was founds");
     return;
   }
+
+  // Sort the intersections
+  std::sort(intersections.begin(), intersections.end());
 
   // Determine the appropriate intersection
   // TODO: Refine if needed
@@ -393,9 +394,9 @@ void GazeCorrelation::synchronized_callback(const gaze_msgs::msg::GazeStamped::S
       end = Eigen::toMsg(gaze.pointAt(VISUAL_GAZE_LENGTH));
       gaze_marker.points.push_back(start);
       gaze_marker.points.push_back(end);
-      gaze_marker.scale.x = VISUAL_GAZE_WIDTH;
-      gaze_marker.scale.y =
-          gaze_marker.scale.z = 0;
+      gaze_marker.scale.x =
+          gaze_marker.scale.y = VISUAL_GAZE_WIDTH;
+      gaze_marker.scale.z = 0;
       gaze_marker.color.r = VISUAL_GAZE_COLOR[0];
       gaze_marker.color.g = VISUAL_GAZE_COLOR[1];
       gaze_marker.color.b = VISUAL_GAZE_COLOR[2];
@@ -431,31 +432,34 @@ void GazeCorrelation::synchronized_callback(const gaze_msgs::msg::GazeStamped::S
       switch (msg_object_of_interest.primitive.type)
       {
       case GeometricPrimitive::PLANE:
-      {
-        object_of_interest_marker.type = visualization_msgs::msg::Marker::CUBE;
+        pub_markers_->publish(markers);
+        return;
+        // {
+        //   object_of_interest_marker.type = visualization_msgs::msg::Marker::CUBE;
 
-        Eigen::Vector3d normal_vector(msg_object_of_interest.primitive.plane[0].coefficients[0],
-                                      msg_object_of_interest.primitive.plane[0].coefficients[1],
-                                      msg_object_of_interest.primitive.plane[0].coefficients[2]);
-        Eigen::Hyperplane<double, 3> hyperplane(normal_vector, msg_object_of_interest.primitive.plane[0].coefficients[3]);
+        //   Eigen::Vector3d normal_vector(msg_object_of_interest.primitive.plane[0].coefficients[0],
+        //                                 msg_object_of_interest.primitive.plane[0].coefficients[1],
+        //                                 msg_object_of_interest.primitive.plane[0].coefficients[2]);
+        //   Eigen::Hyperplane<double, 3> hyperplane(normal_vector, msg_object_of_interest.primitive.plane[0].coefficients[3]);
 
-        Eigen::Vector3d point_on_plane = hyperplane.projection(Eigen::Vector3d(0.0, 0.0, 0.0));
-        object_of_interest_marker.pose.position.x = point_on_plane.x();
-        object_of_interest_marker.pose.position.y = point_on_plane.y();
-        object_of_interest_marker.pose.position.z = point_on_plane.z();
+        //   Eigen::Vector3d point_on_plane = hyperplane.projection(Eigen::Vector3d(0.0, 0.0, 0.0));
+        //   object_of_interest_marker.pose.position.x = point_on_plane.x();
+        //   object_of_interest_marker.pose.position.y = point_on_plane.y();
+        //   object_of_interest_marker.pose.position.z = point_on_plane.z();
 
-        Eigen::Quaternion<double> quat;
-        quat.setFromTwoVectors(Eigen::Vector3d::UnitZ(), hyperplane.normal());
-        object_of_interest_marker.pose.orientation.x = quat.x();
-        object_of_interest_marker.pose.orientation.y = quat.y();
-        object_of_interest_marker.pose.orientation.z = quat.z();
-        object_of_interest_marker.pose.orientation.w = quat.w();
+        //   // TODO: Fix plane orientation for visualisation
+        //   Eigen::Quaternion<double> quat;
+        //   quat.setFromTwoVectors(Eigen::Vector3d::UnitZ(), hyperplane.normal());
+        //   object_of_interest_marker.pose.orientation.x = quat.x();
+        //   object_of_interest_marker.pose.orientation.y = quat.y();
+        //   object_of_interest_marker.pose.orientation.z = quat.z();
+        //   object_of_interest_marker.pose.orientation.w = quat.w();
 
-        object_of_interest_marker.scale.x = 2.0;
-        object_of_interest_marker.scale.y = 2.0;
-        object_of_interest_marker.scale.z = 0.001;
-      }
-      break;
+        //   object_of_interest_marker.scale.x = 2.0;
+        //   object_of_interest_marker.scale.y = 2.0;
+        //   object_of_interest_marker.scale.z = 0.001;
+        // }
+        // break;
       case GeometricPrimitive::SPHERE:
       {
         object_of_interest_marker.type = visualization_msgs::msg::Marker::SPHERE;
