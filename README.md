@@ -25,7 +25,7 @@ source /opt/ros/eloquent/setup.bash
 
 Then source the ROS 2 workspace overlay (if not done before).
 ```bash
-source /path/to/awesome_ws/install/local_setup.bash
+source <awesome_ws>/install/local_setup.bash
 ```
 
 Finally, you can try it out.
